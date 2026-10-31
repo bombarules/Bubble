@@ -1,0 +1,77 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "index.html"
+      - "pins.json"
+      - "mca-parks-map-mapbox/**"
+      - ".github/workflows/build-apk.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get the code
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Collect the web files
+        run: |
+          SRC=.
+          if [ ! -f index.html ]; then SRC=mca-parks-map-mapbox; fi
+          mkdir -p www
+          cp "$SRC/index.html" www/index.html
+          if [ -f "$SRC/pins.json" ]; then cp "$SRC/pins.json" www/pins.json; fi
+          ls -la www
+
+      - name: Create the Android project
+        run: |
+          npm init -y
+          npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
+          cat > capacitor.config.json <<'JSON'
+          {
+            "appId": "com.mca80238.parks",
+            "appName": "MCA Parks",
+            "webDir": "www",
+            "server": { "hostname": "bombarules.github.io", "androidScheme": "https" }
+          }
+          JSON
+          npx cap add android
+          npx cap sync android
+
+      - name: Build the APK
+        working-directory: android
+        run: ./gradlew assembleDebug
+
+      - name: Keep the APK as a download on this run
+        uses: actions/upload-artifact@v4
+        with:
+          name: mca-parks-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Publish the APK for direct download
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest-apk
+          name: Latest Android APK
+          prerelease: true
+          files: android/app/build/outputs/apk/debug/app-debug.apk
