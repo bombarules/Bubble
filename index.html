@@ -108,7 +108,8 @@ button,a,.list *{touch-action:manipulation}
 .z-hi .mk b,.mk.sel b{display:block}.z-mid .mk.lg b{display:block}
 .mapboxgl-ctrl-bottom-left,.mapboxgl-ctrl-bottom-right{bottom:18px}
 .mapnote{position:absolute;left:12px;right:60px;top:60px;background:var(--glass);border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-size:13px;z-index:5}
-#ed,#hint,#exp{display:none!important}
+#exp{display:none!important}
+.toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:#06182a;color:#fff;padding:9px 16px;border-radius:99px;font-size:13px;z-index:60;max-width:90%;text-align:center}
 </style>
 <script src="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.js"></script></head><body>
 <div class="phone"><div class="notch"></div>
@@ -155,8 +156,8 @@ P.forEach(function(p,i){
  var e=document.createElement("div");e.className="mk"+(p[3]==="large"?" lg":"");e.style.setProperty("--c",C[p[3]][1]);
  e.innerHTML="<i></i><b></b>";e.querySelector("b").textContent=p[0];
  e.addEventListener("click",function(ev){ev.stopPropagation();pick(i,false)});
- if(map){var m=new mapboxgl.Marker({element:e,draggable:EDIT}).setLngLat(LL[i]).addTo(map);
-  if(EDIT)m.on("dragend",function(){var c=m.getLngLat();LL[i]=[+c.lng.toFixed(6),+c.lat.toFixed(6)];OVR[p[0]]=LL[i];try{localStorage.setItem("pins_ll2",JSON.stringify(OVR))}catch(x){}});
+ if(map){var m=new mapboxgl.Marker({element:e,draggable:false}).setLngLat(LL[i]).addTo(map);
+  m.on("dragend",function(){var c=m.getLngLat();LL[i]=[+c.lng.toFixed(6),+c.lat.toFixed(6)];OVR[p[0]]=LL[i];try{localStorage.setItem("pins_ll2",JSON.stringify(OVR))}catch(x){}});
   mk.push({el:e,m:m})}else mk.push({el:e,m:null})});
 function setMarkers(){mk.forEach(function(o,i){o.el.classList.toggle("sel",sel===i)})}
 // look up street addresses with Mapbox once, then remember them on this device
@@ -201,7 +202,16 @@ document.getElementById("zo").onclick=function(){if(map)map.zoomOut()};
 function fitAll(d){if(!map)return;var b=new mapboxgl.LngLatBounds();LL.forEach(function(c){b.extend(c)});map.fitBounds(b,{padding:30,duration:d})}
 document.getElementById("hm").onclick=function(){fitAll(600)};
 document.getElementById("sty").onclick=function(){if(!map)return;sat=!sat;this.setAttribute("aria-pressed",sat);map.setStyle(sat?SAT:STR)};
-if(EDIT){var cp=document.getElementById("cp");cp.hidden=false;cp.onclick=function(){var j=JSON.stringify(OVR);try{navigator.clipboard.writeText(j)}catch(e){}window.prompt("Moved pins (copy this and send it)",j)}}
+var ed=false;
+function toast(t){var n=document.createElement("div");n.className="toast";n.textContent=t;document.body.appendChild(n);setTimeout(function(){n.remove()},4500)}
+document.getElementById("hint").textContent="Edit mode: drag a pin to move it. Moves save on this device. Tap the copy button to share them.";
+document.getElementById("ed").onclick=function(){ed=!ed;this.setAttribute("aria-pressed",ed);document.getElementById("cp").hidden=!ed;document.getElementById("hint").hidden=!ed;mk.forEach(function(o){if(o.m)o.m.setDraggable(ed)})};
+document.getElementById("cp").onclick=function(){var o={};P.forEach(function(p,i){o[p[0]]=[+(+LL[i][0]).toFixed(6),+(+LL[i][1]).toFixed(6)]});var j=JSON.stringify(o,null,1);
+ try{navigator.clipboard.writeText(j).then(function(){toast("Copied. In GitHub open pins.json, paste, and commit.")},function(){window.prompt("Copy this into pins.json",j)})}catch(e){window.prompt("Copy this into pins.json",j)}};
+// shared positions: pins.json sits next to index.html
+var PINS={};
+function loadPins(){if(!window.fetch)return Promise.resolve();return fetch("pins.json",{cache:"no-store"}).then(function(r){return r.ok?r.json():{}}).then(function(j){PINS=j||{};
+ P.forEach(function(p,i){var c=PINS[p[0]];if(c&&isFinite(c[0])&&isFinite(c[1])&&!OVR[p[0]]){LL[i]=c;SRC[i]=2;if(mk[i]&&mk[i].m)mk[i].m.setLngLat(c)}})}).catch(function(){})}
 if(window.ResizeObserver&&map)new ResizeObserver(function(){map.resize()}).observe(mapEl);
 // ---- Snow removal pages ----
 // Fill in per property later: SNOW["park-slug"]={curb:"...",walk:"...",notes:"...",photos:["data:image/jpeg;base64,..."]}
@@ -255,7 +265,7 @@ grab.addEventListener("keydown",function(e){if(e.key=="Enter")setSheet(snap===0?
 window.addEventListener("resize",function(){setSheet(snap)});
 
 setSheet(1);render();
-if(map){map.once("load",function(){fitAll(0);geocodeAll()})}
+if(map){map.once("load",function(){loadPins().then(function(){fitAll(0);geocodeAll()})})}
 (function(){var g=document.getElementById("grab"),c=g.cloneNode(true);g.parentNode.replaceChild(c,g);["role","tabindex","aria-label"].forEach(function(a){c.removeAttribute(a)})})();
 var m=(location.hash||"").match(/^#\/snow\/(.+)$/);if(m){P.forEach(function(p,i){if(slug(p[0])==m[1]){sel=i;render();openSnow(i)}})}
 
